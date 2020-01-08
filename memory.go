@@ -6,16 +6,13 @@ import (
 )
 
 type MemoryHandler struct {
-	pid int
-}
-
-func NewMemoryHandler(pid int) MemoryHandler {
-	return MemoryHandler{pid: pid}
+	Pid       int
+	BigEndian bool
 }
 
 func (m MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
 
-	fd, err := attachAndSeekAddress(m.pid, address)
+	fd, err := attachAndSeekAddress(m.Pid, address)
 	if err != nil {
 		return nil, err
 	}
@@ -23,29 +20,33 @@ func (m MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
 	buffer := make([]byte, size)
 	_, err = syscall.Read(fd, buffer)
 	if err != nil {
-		closeAndDetach(fd, m.pid)
+		closeAndDetach(fd, m.Pid)
 		return nil, err
 	}
 
-	err = closeAndDetach(fd, m.pid)
+	err = closeAndDetach(fd, m.Pid)
+
+	if m.BigEndian {
+		reverseBuffer(&buffer)
+	}
 
 	return buffer, err
 }
 
 func (m MemoryHandler) WriteMemory(address int64, buffer []byte) error {
 
-	fd, err := attachAndSeekAddress(m.pid, address)
+	fd, err := attachAndSeekAddress(m.Pid, address)
 	if err != nil {
 		return err
 	}
 
 	_, err = syscall.Write(fd, buffer)
 	if err != nil {
-		closeAndDetach(fd, m.pid)
+		closeAndDetach(fd, m.Pid)
 		return err
 	}
 
-	err = closeAndDetach(fd, m.pid)
+	err = closeAndDetach(fd, m.Pid)
 
 	return err
 }
@@ -79,6 +80,13 @@ func attachAndSeekAddress(pid int, address int64) (int, error) {
 	}
 
 	return fd, err
+}
+
+func reverseBuffer(buffer *[]byte) {
+	for i := len(*buffer)/2 - 1; i >= 0; i-- {
+		opp := len(*buffer) - 1 - i
+		(*buffer)[i], (*buffer)[opp] = (*buffer)[opp], (*buffer)[i]
+	}
 }
 
 func closeAndDetach(fd int, pid int) error {

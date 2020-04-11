@@ -5,17 +5,25 @@ import (
 	"syscall"
 )
 
-type MemoryHandler struct {
+type memory struct {
 	Pid       int
 	BigEndian bool
 }
 
-func (m MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
+func New(pid int, bigEndian bool) *memory {
+	return &memory{
+		Pid:       pid,
+		BigEndian: bigEndian,
+	}
+}
+
+func (m *memory) ReadMemory(address int64, size int) ([]byte, error) {
 
 	fd, err := attachAndSeekAddress(m.Pid, address)
 	if err != nil {
 		return nil, err
 	}
+	defer closeAndDetach(fd, m.Pid)
 
 	buffer := make([]byte, size)
 	_, err = syscall.Read(fd, buffer)
@@ -24,21 +32,20 @@ func (m MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
 		return nil, err
 	}
 
-	err = closeAndDetach(fd, m.Pid)
-
 	if m.BigEndian {
 		reverseBuffer(&buffer)
 	}
 
-	return buffer, err
+	return buffer, nil
 }
 
-func (m MemoryHandler) WriteMemory(address int64, buffer []byte) error {
+func (m *memory) WriteMemory(address int64, buffer []byte) error {
 
 	fd, err := attachAndSeekAddress(m.Pid, address)
 	if err != nil {
 		return err
 	}
+	defer closeAndDetach(fd, m.Pid)
 
 	_, err = syscall.Write(fd, buffer)
 	if err != nil {
@@ -46,9 +53,7 @@ func (m MemoryHandler) WriteMemory(address int64, buffer []byte) error {
 		return err
 	}
 
-	err = closeAndDetach(fd, m.Pid)
-
-	return err
+	return nil
 }
 
 func attachAndSeekAddress(pid int, address int64) (int, error) {

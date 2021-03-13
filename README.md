@@ -1,6 +1,6 @@
 # LinuxMem
 
-> Easilie read and write to the memory of process on a linux system. 
+> Easily read and write to the memory of process on a linux system. 
 
 ## Example
 

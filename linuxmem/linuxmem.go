@@ -5,12 +5,19 @@ import (
 	"syscall"
 )
 
-type MemoryHandler struct {
+type memory struct {
 	Pid       int
 	BigEndian bool
 }
 
-func (m *MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
+func New(pid int, bigEndian bool) *memory {
+	return &memory{
+		Pid:       pid,
+		BigEndian: bigEndian,
+	}
+}
+
+func (m *memory) ReadMemory(address int64, size int) ([]byte, error) {
 	if err := attachToProcess(m.Pid); err != nil {
 		return nil, err
 	}
@@ -19,6 +26,7 @@ func (m *MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer closeAndDetach(fd, m.Pid)
 
 	buffer := make([]byte, size)
 	_, err = syscall.Read(fd, buffer)
@@ -35,7 +43,7 @@ func (m *MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
 	return buffer, err
 }
 
-func (m *MemoryHandler) WriteMemory(address int64, buffer []byte) error {
+func (m *memory) WriteMemory(address int64, buffer []byte) error {
 	if err := attachToProcess(m.Pid); err != nil {
 		return err
 	}
@@ -44,6 +52,7 @@ func (m *MemoryHandler) WriteMemory(address int64, buffer []byte) error {
 	if err != nil {
 		return err
 	}
+	defer closeAndDetach(fd, m.Pid)
 
 	_, err = syscall.Write(fd, buffer)
 	if err != nil {

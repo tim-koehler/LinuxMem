@@ -10,9 +10,12 @@ type MemoryHandler struct {
 	BigEndian bool
 }
 
-func (m MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
+func (m *MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
+	if err := attachToProcess(m.Pid); err != nil {
+		return nil, err
+	}
 
-	fd, err := attachAndSeekAddress(m.Pid, address)
+	fd, err := seekAddress(m.Pid, address)
 	if err != nil {
 		return nil, err
 	}
@@ -24,18 +27,20 @@ func (m MemoryHandler) ReadMemory(address int64, size int) ([]byte, error) {
 		return nil, err
 	}
 
-	err = closeAndDetach(fd, m.Pid)
-
 	if m.BigEndian {
 		reverseBuffer(&buffer)
 	}
 
+	err = closeAndDetach(fd, m.Pid)
 	return buffer, err
 }
 
-func (m MemoryHandler) WriteMemory(address int64, buffer []byte) error {
+func (m *MemoryHandler) WriteMemory(address int64, buffer []byte) error {
+	if err := attachToProcess(m.Pid); err != nil {
+		return err
+	}
 
-	fd, err := attachAndSeekAddress(m.Pid, address)
+	fd, err := seekAddress(m.Pid, address)
 	if err != nil {
 		return err
 	}
@@ -47,25 +52,24 @@ func (m MemoryHandler) WriteMemory(address int64, buffer []byte) error {
 	}
 
 	err = closeAndDetach(fd, m.Pid)
-
 	return err
 }
 
-func attachAndSeekAddress(pid int, address int64) (int, error) {
-
-	memFile := "/proc/" + strconv.Itoa(int(pid)) + "/mem"
-
-	err := syscall.PtraceAttach(pid)
-	if err != nil {
-		return 0, err
+func attachToProcess(pid int) error {
+	if err := syscall.PtraceAttach(pid); err != nil {
+		return err
 	}
 
 	var wstat syscall.WaitStatus
-	_, err = syscall.Wait4(pid, &wstat, 0, nil)
-	if err != nil {
+	if _, err := syscall.Wait4(pid, &wstat, 0, nil); err != nil {
 		syscall.PtraceDetach(pid)
-		return 0, err
+		return err
 	}
+	return nil
+}
+
+func seekAddress(pid int, address int64) (int, error) {
+	memFile := "/proc/" + strconv.Itoa(int(pid)) + "/mem"
 
 	fd, err := syscall.Open(memFile, 2, 0)
 	if err != nil {
@@ -90,17 +94,12 @@ func reverseBuffer(buffer *[]byte) {
 }
 
 func closeAndDetach(fd int, pid int) error {
-
-	err := syscall.Close(fd)
-	if err != nil {
+	if err := syscall.Close(fd); err != nil {
 		syscall.PtraceDetach(pid)
 		return err
 	}
-
-	err = syscall.PtraceDetach(pid)
-	if err != nil {
+	if err := syscall.PtraceDetach(pid); err != nil {
 		return err
 	}
-
 	return nil
 }
